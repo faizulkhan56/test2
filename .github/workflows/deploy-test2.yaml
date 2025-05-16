@@ -35,7 +35,7 @@ jobs:
       id: vars
       run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-    - name: Build & push image
+    - name: Build & push Docker image
       run: |
         docker build -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} .
         docker push $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
@@ -48,16 +48,17 @@ jobs:
       run: |
         sed -i "s|REPLACEME|${{ steps.vars.outputs.sha_short }}|" kustomize/overlays/${{ env.ENV }}/patch.yaml
 
-    - name: Render final deployment
+    - name: Render final deployment with Kustomize
       run: |
         kustomize build kustomize/overlays/${{ env.ENV }} > deployment.yaml
 
-    - name: Push manifest to GitOps repo
+    - name: Push manifests to GitOps repo
       run: |
         mkdir -p gitops-infra/apps/${{ env.APP_NAME }}/${{ env.ENV }}
         cp deployment.yaml gitops-infra/apps/${{ env.APP_NAME }}/${{ env.ENV }}/deployment.yaml
         cp kustomize/base/service.yaml gitops-infra/apps/${{ env.APP_NAME }}/${{ env.ENV }}/service.yaml
         echo "${{ steps.vars.outputs.sha_short }}" > gitops-infra/apps/${{ env.APP_NAME }}/${{ env.ENV }}/.last-image-tag
+
         cd gitops-infra
         git config user.name "ci-bot"
         git config user.email "ci@github.com"
@@ -65,11 +66,11 @@ jobs:
         git commit -m "Deploy $APP_NAME to $ENV with image tag ${{ steps.vars.outputs.sha_short }}"
         git push
 
-    - name: Apply Argo CD Application for test1
+    - name: Apply Argo CD Application for test2
       env:
         KUBECONFIG_FILE: ${{ secrets.KUBECONFIG }}
       run: |
-        echo "$KUBECONFIG_FILE" > kubeconfig.yaml
+        echo "$KUBECONFIG_FILE" | base64 -d > kubeconfig.yaml
         export KUBECONFIG=$PWD/kubeconfig.yaml
-
         kubectl apply -f argocd/test2-test-app.yaml -n argocd
+
