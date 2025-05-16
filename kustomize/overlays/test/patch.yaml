@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: test2
 spec:
-  replicas: 2                # ✅ Set the desired replica count here
+  replicas: 3                # ✅ Set the desired replica count here
   template:
     spec:
       containers:
