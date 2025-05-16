@@ -3,8 +3,17 @@ kind: Deployment
 metadata:
   name: test2
 spec:
+  replicas: 2                # ✅ Set the desired replica count here
   template:
     spec:
       containers:
         - name: test2
           image: faizul56/test2-app:REPLACEME
+          resources:         # (Optional) Add resource settings here too
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
