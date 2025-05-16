@@ -1,0 +1,75 @@
+name: Deploy test2 to Test
+
+on:
+  push:
+    branches: [main]
+
+env:
+  ENV: test
+  APP_NAME: test2
+  DOCKER_REPO: faizul56/test2-app
+  GITOPS_REPO: https://github.com/faizulkhan56/gitops-infra.git
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout app repo
+      uses: actions/checkout@v3
+
+    - name: Install Kustomize
+      run: |
+        mkdir -p tmp-kustomize
+        curl -Lo tmp-kustomize/kustomize.tar.gz https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.3.0/kustomize_v5.3.0_linux_amd64.tar.gz
+        tar -xzf tmp-kustomize/kustomize.tar.gz -C tmp-kustomize
+        sudo mv tmp-kustomize/kustomize /usr/local/bin/kustomize
+
+    - name: Docker login
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Get commit SHA
+      id: vars
+      run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Build & push image
+      run: |
+        docker build -t $DOCKER_REPO:${{ steps.vars.outputs.sha_short }} .
+        docker push $DOCKER_REPO:${{ steps.vars.outputs.sha_short }}
+
+    - name: Clone GitOps repo
+      run: |
+        git clone https://x-access-token:${{ secrets.GITOPS_PAT }}@github.com/faizulkhan56/gitops-infra.git
+
+    - name: Replace image tag in patch.yaml
+      run: |
+        sed -i "s|REPLACEME|${{ steps.vars.outputs.sha_short }}|" kustomize/overlays/${{ env.ENV }}/patch.yaml
+
+    - name: Render final deployment
+      run: |
+        kustomize build kustomize/overlays/${{ env.ENV }} > deployment.yaml
+
+    - name: Push manifest to GitOps repo
+      run: |
+        mkdir -p gitops-infra/apps/${{ env.APP_NAME }}/${{ env.ENV }}
+        cp deployment.yaml gitops-infra/apps/${{ env.APP_NAME }}/${{ env.ENV }}/deployment.yaml
+        cp kustomize/base/service.yaml gitops-infra/apps/${{ env.APP_NAME }}/${{ env.ENV }}/service.yaml
+        echo "${{ steps.vars.outputs.sha_short }}" > gitops-infra/apps/${{ env.APP_NAME }}/${{ env.ENV }}/.last-image-tag
+        cd gitops-infra
+        git config user.name "ci-bot"
+        git config user.email "ci@github.com"
+        git add .
+        git commit -m "Deploy $APP_NAME to $ENV with image tag ${{ steps.vars.outputs.sha_short }}"
+        git push
+
+    - name: Apply Argo CD Application for test1
+      env:
+        KUBECONFIG_FILE: ${{ secrets.KUBECONFIG }}
+      run: |
+        echo "$KUBECONFIG_FILE" > kubeconfig.yaml
+        export KUBECONFIG=$PWD/kubeconfig.yaml
+
+        kubectl apply -f argocd/test2-test-app.yaml -n argocd
