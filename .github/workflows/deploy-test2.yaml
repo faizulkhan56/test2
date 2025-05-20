@@ -74,3 +74,14 @@ jobs:
         export KUBECONFIG=$PWD/kubeconfig.yaml
         kubectl apply -f argocd/test2-test-app.yaml -n argocd
 
+
+    - name: Wait for Argo CD Sync (optional, or use Argo CD API)
+      run: |
+        kubectl -n test2 rollout status deployment/test2 --timeout=120s
+
+    - name: Run K6 Load Test (Sample)
+      run: |
+        docker run --rm -i \
+        -v ${{ github.workspace }}/load-tests:/scripts \
+        grafana/k6 run /scripts/test2.js
+
