@@ -79,6 +79,8 @@ jobs:
       env:
         KUBECONFIG_FILE: ${{ secrets.KUBECONFIG }}
       run: |
+        echo "⏳ Sleeping for 120 seconds to allow Argo CD sync..."
+        sleep 120
         echo "$KUBECONFIG_FILE" | base64 -d > kubeconfig.yaml
         export KUBECONFIG=$PWD/kubeconfig.yaml
         kubectl -n test2 rollout status deployment/test2 --timeout=120s
